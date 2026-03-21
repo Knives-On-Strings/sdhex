@@ -1,16 +1,17 @@
 # SDHex
 
-**DRUM BRAINZZZZ** — Simmons drum machine emulation.
+**DRUM BRAINZZZZ** — Simmons SDS drum brain(s) emulation.
 
 - **Formats:** VST3, CLAP
 - **Platforms:** Windows
-- **Status:** Alpha
+- **Status:** Alpha (Mostly works)
 - **Version:** 1.11.1
 
 ## Links
 
 - [Product page](https://knivesonstrings.com/sdhex)
 - [Get it on Gumroad](https://knivesonstrings.gumroad.com/l/sdhex)
+- [Check it out on KVR](https://www.kvraudio.com/product/sdhex-by-knives-on-strings)
 
 ## Support
 
