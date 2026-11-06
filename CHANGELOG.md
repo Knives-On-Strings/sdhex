@@ -44,7 +44,7 @@ Releases before 0.14.0 were built as 1.x; they're listed here as 0.x.
   restore was still applying them, so some values were lost. Seen in pluginval
   about one run in four; none in 48 runs since the fix.
 
-## [0.13.1] - 2026-09-30
+## [0.13.1] - 2026-09
 
 Built as 1.13.1.
 
@@ -58,13 +58,13 @@ Built as 1.13.1.
   kits are still installed and load from the kit browser; saved DAW sessions
   restore exactly as before. The top bar starts at "Init" rather than naming a
   kit that was never loaded.
-- **Fixed:** **clap-validator `param-default-values`** — the last clap-validator
-  failure. SDHex now passes with 0 failures (33 passed, 1 warning, 10 skipped;
-  the warning, `state-invalid-random`, comes from the JUCE CLAP wrapper, whose
-  state load cannot report failure). Regression-tested by checking every one of
-  the 290 parameters against its declared default on a fresh instance.
+- **Fixed:** **clap-validator's parameter-defaults test** — the last
+  clap-validator failure. SDHex now passes with 0 failures (33 passed, 1
+  warning, 10 skipped; the warning comes from the JUCE CLAP wrapper, whose state
+  load cannot report failure). Regression-tested by checking every one of the
+  290 parameters against its declared default on a fresh instance.
 
-## [0.13.0] - 2026-09-29
+## [0.13.0] - 2026-09
 
 Built as 1.13.0.
 
@@ -79,9 +79,8 @@ Minor: the plugin now exposes a different set of outputs to the host.
   of which only apply to the main mix. Pad buses are stereo or disabled; any
   other layout is rejected.
 - **Fixed:** **Pad audio went to the wrong outputs whenever a host disabled any
-  pad bus.** Routing computed each pad's channel as `2 + padIndex`, which is
-  only correct while every bus is enabled — JUCE packs the enabled buses'
-  channels into the buffer contiguously. Hosts that activate outputs
+  pad bus.** Routing assumed every bus was enabled — JUCE packs the enabled
+  buses' channels into the buffer contiguously. Hosts that activate outputs
   selectively, such as Cubase (main output only until the user enables more),
   shifted every pad above a disabled bus onto its neighbour's output, silently:
   route "Pad 4" to a tom track, hear the kick. Destinations are now resolved
@@ -89,11 +88,11 @@ Minor: the plugin now exposes a different set of outputs to the host.
   nothing allocates on the audio thread. The oversampled and 1x render paths now
   share one routing block rather than two copies that could drift apart.
 
-  Regression-tested by `Tests/Processor/MultiOutputTests.cpp`. Its key case —
-  main plus Pad 4 enabled, trigger Pad 1, assert Pad 4 stays silent — was
-  checked against the old indexing reinstated, and fails on it.
+  Regression-tested. Its key case — main plus Pad 4 enabled, trigger Pad 1,
+  assert Pad 4 stays silent — was checked against the old indexing reinstated,
+  and fails on it.
 
-## [0.12.0] - 2026-09-18
+## [0.12.0] - 2026-09
 
 Built as 1.12.0.
 
@@ -102,80 +101,57 @@ Minor rather than patch: this adds a feature, not a fix.
 ### UI
 
 - **New:** **Telemetry and issue reporting, via the shared KosNet library.**
-  SDHex is the first plugin wired to `../kos-net` rather than carrying its own
-  copy — XCent, Stabmatic and Virage each had one, and the three were literally
-  the same files differing only in macro prefix, namespace and logging header.
+  SDHex is the first plugin wired to the shared library rather than carrying its
+  own copy — XCent, Stabmatic and Virage each had one, and the three were
+  literally the same files differing only in macro prefix, namespace and logging
+  header.
 
   **Off by default, and it stays off until asked.** With the feature compiled
   out, KosNet is a set of no-op stubs, no socket-opening code exists in the
-  binary, and every piece of privacy UI is absent from the DOM rather than
-  disabled. Enable with `-DSDHEX_NETWORK_ENABLED=ON` plus a form secret; the
-  secret is not stored in this repo and CMake warns without one.
+  binary, and every piece of privacy UI is absent rather than disabled. It is
+  enabled at build time, with a form secret that is not stored in this repo.
 
   What it sends when enabled: anonymous session start/end, plugin format, host
   name and OS, keyed to a random per-install id. Never audio, never presets,
   never file paths.
-  - **New:** Processor: identity and log sink registered from the constructor;
-    `session_start` fires in `prepareToPlay` below the scanner guard, so a
-    pluginval or auval scan is not counted as a session, and is latched so a
-    sample-rate change extends one session rather than starting another;
-    `session_end` fires only if a session was actually opened.
-  - **New:** Editor: `getPrivacyState`, `setTelemetryEnabled` and `reportIssue`
-    native functions. `opt_out` fires before the preference flips — the last
-    permitted use of the consent being withdrawn, and what makes the opt-out
-    rate measurable.
   - **New:** UI: first-run consent panel that asks once, a permanent Settings →
     Privacy toggle, a Report-a-bug entry point, and a copyable-URL fallback
     panel for when the backend ping fails.
-- **Fixed:** **`host_version` would have leaked a filesystem path.** The first
-  draft of the telemetry wiring used `PluginHostType::getHostPath()` for that
-  field, which returns the host executable's path and on macOS routinely
-  contains `/Users/<username>/`. The privacy contract forbids sending file
-  paths. Now `SystemStats::getOperatingSystemName()`, commented at both call
-  sites since it is the easy place to reintroduce.
+- **Fixed:** **The host's version could have leaked a file path.** The first
+  draft of the telemetry reported the host application's path, which on macOS
+  routinely contains your user name. The privacy contract forbids sending file
+  paths; it now sends the operating system's name.
 
-## [0.11.3] - 2026-09-17
+## [0.11.3] - 2026-09
 
 Built as 1.11.3.
 
-1.11.2's changes are included here. That version was written up in this file
-but `project(SDHex VERSION ...)` was never incremented for it, so no build ever
+1.11.2's changes are included here. That version was written up in this file but
+the build's version number was never incremented for it, so no build ever
 carried the number; 1.11.3 is the first build containing those fixes.
 
 ### Hosts & formats
 
 - **Fixed:** **Host never told that parameter values changed after a state
-  restore** — `setStateInformation()` restored the APVTS state correctly but
-  never called `updateHostDisplay()`, so hosts kept serving their cached
-  parameter values. After loading a session the host's generic UI, automation
-  lanes and preset display all showed the pre-load values. Now calls
-  `updateHostDisplay()` with `programChanged` and `parameterInfoChanged` set,
-  which is what JUCE's own format wrappers do after loading a program, and what
-  the CLAP wrapper turns into `params.rescan(CLAP_PARAM_RESCAN_VALUES)`.
-  Affected VST3 and AU as well as CLAP; found by clap-validator's
-  `state-reproducibility-*` tests, which pluginval has no equivalent of.
-- **Fixed:** **Plugin state grew on every save/load cycle** —
-  `getStateInformation()` unconditionally appended a `VoicePresets` element,
-  while `setStateInformation()` handed the whole tree, that element included, to
-  `AudioProcessorValueTreeState::replaceState()`. The element was therefore
-  stored inside the APVTS tree, came back out of the next `copyState()`, and was
-  written again, so each cycle added another copy and no two consecutive saves
-  were byte-identical. `setStateInformation()` now strips it before passing the
-  tree to APVTS, and `getStateInformation()` clears any strays before adding its
-  own, so states written by earlier builds heal on next save.
-- **Fixed:** **`One→Three` FM algorithm silently selected `Chain`** — the choice
-  name contained a U+2192 arrow. Parameter text crosses the host boundary
-  through fixed-size C string buffers and JUCE resolves it back with an exact
-  `choices.indexOf(text)`; a miss returns -1, which clamps to index 0. Renamed
-  to `One-Three`. All host-visible parameter strings are now ASCII, guarded by a
+  restore** — so hosts kept serving their cached parameter values. After loading
+  a session the host's generic UI, automation lanes and preset display all
+  showed the pre-load values. SDHex now tells the host, as JUCE's own format
+  wrappers do after loading a program. Affected VST3 and AU as well as CLAP;
+  found by clap-validator's state-reproducibility tests, which pluginval has no
+  equivalent of.
+- **Fixed:** **Plugin state grew on every save/load cycle** — each save stored
+  another copy of the voice presets inside the saved state, so no two
+  consecutive saves were byte-identical. States written by earlier builds heal
+  on next save.
+- **Fixed:** **The One→Three FM algorithm silently selected Chain** — the choice
+  name contained an arrow character that does not survive the trip through the
+  host, so the name came back unmatched and fell to the first choice. Renamed to
+  One-Three. All host-visible parameter strings are now ASCII, guarded by a
   test.
 - **Fixed:** **macOS build was broken** — two faults, neither reachable from the
-  Windows toolchain. CMake handed the C++ precompiled header to JUCE's 62
-  Objective-C++ sources (`Objective-C was disabled in precompiled file`); those
-  are now exempted from the PCH. And `PluginEditor.cpp` requested the WebView2
-  backend and a `windowsLocalAppData` user-data folder unconditionally, which
-  does not compile on AppClang; both are now behind `#if JUCE_WINDOWS`, so macOS
-  and Linux take JUCE's default WebKit backend.
+  Windows toolchain: a build setting the macOS compiler rejects, and
+  Windows-only web view settings applied on every platform. macOS and Linux now
+  use JUCE's default WebKit backend.
 
 ### Maintenance
 
@@ -210,7 +186,7 @@ UI & standards pass.
 ### UI
 
 - **New:** Pointer capture on all knobs and buttons — Shift for fine mode,
-  double-click to reset, pointerCancel handling
+  double-click to reset
 - **New:** Settings modal Appearance tab with UI scale control; EPROM settings
   merged into Sound tab; tabs reordered
 - **New:** MIDI activity LED wired from C++ events
@@ -224,8 +200,8 @@ UI & standards pass.
 
 ### Sound engine
 
-- **Fixed:** Fixed DigitalClapModel deactivating on envelope expiry instead of
-  EPROM end
+- **Fixed:** Fixed the Digital Clap voice deactivating on envelope expiry
+  instead of EPROM end
 - **Fixed:** LM13700 Vt2 scale and CA3080 ratio accuracy fixes
 
 ### UI
@@ -238,36 +214,33 @@ UI & standards pass.
 - **New:** CLAP format support
 - **New:** iOS/iPadOS AUv3 and Standalone builds
 
-## [0.11.2] - 2026-04-15
+## [0.11.2] - 2026-04
 
 Built as 1.11.2.
 
 ### Sound engine
 
-- **Fixed:** **DigitalClapModel voice stuck active after envelope expiry** — `isActive()` remained
-  true long after both LM13700 envelopes expired because the inactivity gate also required
-  `!eprom.isPlaying()`. The EPROM player continued running for ~200ms after the envelopes
-  hit zero (producing no audible output), wasting CPU and preventing voice stealing.
-  Gate now checks only envelope state; `eprom.reset()` is called immediately on deactivation
-  to stop the silent playback.
+- **Fixed:** **Digital Clap voice stuck active after its envelopes ended** — the
+  EPROM player kept running for ~200ms after both LM13700 envelopes hit zero
+  (producing no audible output), wasting CPU and preventing voice stealing. The
+  voice now stops when its envelopes do.
 
-## [0.11.1] - 2026-02-28
+## [0.11.1] - 2026-02
 
 Built as 1.11.1.
 
 ### Sound engine
 
-- **Fixed:** **SDS-9 SUB_MIX on tom voices** — Tom voices (Low/Mid/High Tom) were mixing in
-  sub-oscillator output despite the SDS-9 hardware only having sub-oscillator on the
-  bass card. Changed `vcoWithSub` → `vcoOutput` in processSample(). This also fixes
-  a compilation error from the partially-applied v1.11.0 audit changes.
-- **Fixed:** **SDS-9 FILTER dead knob travel** — APVTS FILTER range (100–15000 Hz) exceeded the
-  CEM3394's effective range (200–12000 Hz), causing dead knob travel at extremes.
-  Base cutoff is now clamped to 200–12000 Hz in updateDSPParameters(). FM-modulated
-  cutoff was already clamped; this makes the base consistent. Cosmetic fix only —
-  audio behavior unchanged (CEM3394 was already clamping internally).
+- **Fixed:** **SDS-9 sub-oscillator on tom voices** — Tom voices (Low/Mid/High
+  Tom) were mixing in sub-oscillator output despite the SDS-9 hardware only
+  having a sub-oscillator on the bass card.
+- **Fixed:** **SDS-9 FILTER dead knob travel** — the FILTER knob's range
+  (100–15000 Hz) exceeded the CEM3394's effective range (200–12000 Hz), causing
+  dead knob travel at extremes. Cutoff is now clamped to 200–12000 Hz. Cosmetic
+  fix only — audio behavior unchanged (the CEM3394 was already clamping
+  internally).
 
-## [0.11.0] - 2026-02-28
+## [0.11.0] - 2026-02
 
 Built as 1.11.0.
 
@@ -279,50 +252,44 @@ Built as 1.11.0.
 
 ### UI
 
-- **New:** **Preset filtering by model in VoicePickerModal** — The preset column now only shows
-  presets matching the currently selected model family. Previously all presets from all
-  models were shown in a flat list. Uses the `engine` field from `getDrumPresetList()` to
-  filter via `ENGINE_TO_VOICE_INFO` mapping. "Factory" reset option always visible.
-- **Improved:** **SDS-8 CLICK knob color: light blue → royal blue** — Added `royalBlue` (#4488CC) color
-  token to `@pfs/ui` theme. SDS-8 CLICK knob now uses this darker blue to visually
-  differentiate it from the other parameter knobs on the navy-themed strip.
+- **New:** **The voice picker's preset column filters by model** — it only shows
+  presets matching the currently selected model family. Previously all presets
+  from all models were shown in a flat list. The "Factory" reset option is
+  always visible.
+- **Improved:** **SDS-8 CLICK knob color: light blue → royal blue** — a darker
+  blue (#4488CC) to visually differentiate it from the other parameter knobs on
+  the navy-themed strip.
 
-## [0.10.0] - 2026-02-28
+## [0.10.0] - 2026-02
 
 Built as 1.10.0.
 
 ### UI
 
-- **New:** **Undo/redo for all parameter changes** — wired JUCE `UndoManager` into APVTS so every knob
-  drag, preset load, kit load, factory reset, and model change is undoable.
+- **New:** **Undo/redo for all parameter changes** — every knob drag, preset
+  load, kit load, factory reset, and model change is undoable.
   - **New:** Keyboard shortcuts: `Ctrl+Z` (undo), `Ctrl+Y` / `Ctrl+Shift+Z`
     (redo)
   - **New:** Header bar undo/redo arrow buttons with auto-dimming when stack is
     empty
-  - **New:** Preset loads grouped as single undo transactions via
-    `beginNewTransaction()`
+  - **New:** Preset loads grouped as single undo transactions
   - **New:** Undo history is in-memory (cleared on DAW session restore, lost on
     close)
 
-## [0.9.1] - 2026-02-28
+## [0.9.1] - 2026-02
 
 Built as 1.9.1.
 
 ### Kits
 
-- **Fixed:** **"Factory" voice preset was a no-op** — Selecting "Factory" in the Voice Picker now correctly
-  resets the voice to model-specific factory defaults. Previously, the UI attempted to load a
-  `Factory.json` drum preset file that does not exist, silently failed, and left all parameters
-  unchanged — causing each pad to show "Factory" while retaining residual values from previously
-  loaded presets or manual tweaks.
-  - **Fixed:** Root cause: `PresetManager::loadDrumPreset("Factory", ...)` fell through to file I/O path
-    with no special handling for the synthetic "Factory" sentinel name
-  - **Fixed:** Fix: Added `applyFactoryDefaults(padNumber)` which reads the current `MODEL` parameter and
-    applies curated, musically appropriate defaults for all 23 model types (pitch, decay, bend,
-    balance, click, filter, resonance). All other per-voice params (FM, filter env, sub mix, etc.)
-    are reset to APVTS defaults. No new files are required.
+- **Fixed:** **"Factory" voice preset was a no-op** — Selecting "Factory" in the
+  Voice Picker now correctly resets the voice to model-specific factory
+  defaults. Previously, the UI attempted to load a drum preset file that does
+  not exist, silently failed, and left all parameters unchanged — causing each
+  pad to show "Factory" while retaining residual values from previously loaded
+  presets or manual tweaks.
 
-## [0.9.0] - 2026-02-28
+## [0.9.0] - 2026-02
 
 Built as 1.9.0.
 
@@ -330,48 +297,44 @@ Built as 1.9.0.
 
 - **New:** **SDS-7 independent digital EPROM controls** — the Digital (D) section now has its own
   dedicated parameters separate from the Analog (A) section, matching the real SDS-7 hardware:
-  - **New:** `D_PITCH` — EPROM playback rate (20–6000 Hz), independent from VCO
-    pitch
-  - **New:** `D_BEND` — EPROM pitch bend depth (0–100%), independent from VCO
-    bend
-  - **New:** `D_FM_DEPTH` — FM LFO modulation depth on EPROM (0–100%), independent from VCO FM
-  - **New:** `D_BALANCE` — EPROM level in mix (0–100%), independent from VCO balance (A Level)
-  - **New:** 48 new APVTS parameters (4 per voice x 12 voices) with relay/attachment bindings
-  - **New:** React UI: SDS-7 panel D-mode buttons now control digital-specific
-    params
-  - **New:** DSP: SDS7Model processes digital params independently (separate pitch bend, FM, and level)
+  - **New:** Digital Pitch — EPROM playback rate (20–6000 Hz), independent from
+    VCO pitch
+  - **New:** Digital Bend — EPROM pitch bend depth (0–100%), independent from
+    VCO bend
+  - **New:** Digital FM Depth — FM LFO modulation depth on EPROM (0–100%),
+    independent from VCO FM
+  - **New:** Digital Level — EPROM level in mix (0–100%), independent from VCO
+    balance (A Level)
+  - **New:** The SDS-7 panel's D-mode buttons control the digital parameters
 
-## [0.8.1] - 2026-02-24
+## [0.8.1] - 2026-02
 
 Built as 1.8.1.
 
 ### UI
 
-- **Fixed:** **Knob pointer off-center** — `left: calc(50% - 4px)` correctly centers the 8px-wide
-  border-triangle without `translateX(-50%)` (which the JS rotate override was removing)
-- **Fixed:** **Master-knob inset shadow not applying** — moved `.master-knob .knob-body` rule into
-  `index.html` inline `<style>` so it wins over `.knob-body.color-tan` (equal specificity
-  0,2,0; inline `<style>` loads after linked `components.css`)
-- **Fixed:** **Clap-A index line off-center and wrong orbit** — `left: calc(50% - 1px)` centers the
-  2px line; `transform-origin: center 18px` places rotation pivot at knob center (21,21)
-  instead of (22,18); master-knob variant uses `19.5px`
+- **Fixed:** **Knob pointer off-center** — it now sits centred on every knob.
+- **Fixed:** **MASTER knob inset shadow not applying** — the deeper inset shadow
+  from 1.7.3 now shows.
+- **Fixed:** **Clap-A index line off-center and on the wrong orbit** — it now
+  rotates around the knob's centre.
 
-## [0.8.0] - 2026-02-24
+## [0.8.0] - 2026-02
 
 Built as 1.8.0.
 
 ### Sound engine
 
-- **New:** **SDS-V amplitude envelope attack** — hardware-accurate 0.5ms non-zero attack on
-  the tone/amplitude EG (`eg1`), reflecting capacitor charging behavior on the SDS-V
-  module board (0.1–1.0ms RC range per service manual)
+- **New:** **SDS-V amplitude envelope attack** — hardware-accurate 0.5ms
+  non-zero attack on the tone/amplitude envelope, reflecting capacitor charging
+  behavior on the SDS-V module board (0.1–1.0ms RC range per service manual)
   - **New:** Previously: instant attack (0ms), snapping immediately to target velocity level
-  - **New:** Now: 0.5ms exponential rise to target velocity (~99% in 0.5ms via 4.6τ coefficient)
-  - **New:** Only `eg1` (amplitude) is affected; `eg2` (noise) and `eg3` (click, 4.7ms) unchanged
+  - **New:** Only the amplitude envelope changes; the noise and click envelopes
+    are unchanged
   - **New:** No new user parameters — internal DSP change only; backward
     compatible
 
-## [0.7.3] - 2026-02-23
+## [0.7.3] - 2026-02
 
 Built as 1.7.3.
 
@@ -379,13 +342,10 @@ Built as 1.7.3.
 
 - **Improved:** **MASTER knob inset shadow** — added deeper concave shadow to the MASTER volume
   knob body for a pressed-in bowl appearance
-  - **Improved:** Added `.master-knob .knob-body` rule in `components.css` overriding the generic
-    `.color-tan` box-shadow with stronger inset values
-    (`inset 0 3px 6px rgba(0,0,0,0.45)` top, `inset 0 -2px 4px rgba(255,255,255,0.18)` bottom)
   - **Improved:** Outer drop shadow retained unchanged; only the inset layers
     are deepened
 
-## [0.7.2] - 2026-02-23
+## [0.7.2] - 2026-02
 
 Built as 1.7.2.
 
@@ -393,56 +353,36 @@ Built as 1.7.2.
 
 - **Fixed:** **Layout broken after switching from Clap-A** — knobs (RES, PITCH, DECAY, FILTER)
   appeared below the hex pad when switching any voice away from Clap-A
-  - **Fixed:** Root cause: `makeClapSection` appends wrapper divs to the end of the strip DOM
-    (after the hex-pad). Unwrapping moved children back before the wrapper's current
-    position — which is still after the hex-pad. PITCH/DECAY/FILTER visually overflowed
-    below the pad.
-  - **Fixed:** Fix: after clap-section cleanup, all `knobContainers` are re-inserted before the
-    hex-pad in their original order (indices 0–8)
-- **Fixed:** **Resonance knob gap for SDS-3/4 and SDS-8** — `visibility: hidden`
-  kept the knob invisible but preserved its layout space, leaving a blank gap at
-  the top of the channel strip
-  - **Fixed:** Fix: changed to `display: none` to fully collapse the space; reset path updated
-    to restore `display: ''` before applying per-model config
+- **Fixed:** **Resonance knob gap for SDS-3/4 and SDS-8** — the hidden knob
+  still took up its space, leaving a blank gap at the top of the channel strip
 
-## [0.7.1] - 2026-02-23
+## [0.7.1] - 2026-02
 
 Built as 1.7.1.
 
 ### UI
 
-- **Fixed:** **Knob double shadow (regression from v1.6.0)** — `filter:
-  drop-shadow` was reintroduced on `.knob` during the v1.6.0 UI rebuild
-  - **Fixed:** Root cause: same as v1.5.3 — `.knob-body` already has `box-shadow: 0 4px 8px`,
-    stacking two shadow systems on every knob; `filter` also creates a CSS stacking
-    context causing Clap-A tick marks to cast shadows onto the knob surface
-  - **Fixed:** Fix: removed `filter: drop-shadow` from `.knob` in
-    `components.css`
+- **Fixed:** **Knob double shadow (regression from v1.6.0)** — the second shadow
+  came back in the v1.6.0 UI rebuild
 
-## [0.7.0] - 2026-02-23
+## [0.7.0] - 2026-02
 
 Built as 1.7.0.
 
 ### Sound engine
 
 - **New:** **SDS-7 filter envelope sweep** — hardware-authentic independent filter envelope
-  - **New:** New `FILT_ENV` parameter per voice (0–600ms, from SDS-7 service
+  - **New:** New Filter Env knob per voice (0–600ms, from the SDS-7 service
     guide)
   - **New:** On note trigger, filter cutoff starts 2 octaves above FILTER knob position and
     sweeps down exponentially to the resting FILTER value over the set time
-  - **New:** `FILT_ENV = 0` (default): no sweep, filter stays static (backward compatible)
-  - **New:** Root cause: SDS-7 service guide confirms hardware has independent filter sweep
-    envelope (8–600ms range) separate from the amplitude envelope
+  - **New:** Filter Env at 0 (default): no sweep, filter stays static (backward
+    compatible)
   - **New:** UI: FILT ENV knob replaces CLICK for SDS-7 model (CLICK is stored but hidden)
-  - **New:** DSP: `AREnvelope filterSweepEg` in `SDS7Model.h`; updates CEM3372
-    cutoff per sample while sweep is active, returns to static mode after sweep
-    completes
 - **Improved:** **DECAY parameter max: 2000ms → 2200ms** — matches hardware RC
   maximum
-  - **Improved:** Root cause: SDS-9 service manual documents 220kΩ × 10µF = 2.2s RC time constant
   - **Improved:** Extends parameter range by ~9% to fully cover hardware
     specification
-  - **Improved:** DECAY parameter version unchanged (1); range extension is backward compatible
   - **Improved:** Existing presets with DECAY ≤ 2000ms unaffected
 
 ### UI
@@ -455,7 +395,7 @@ Built as 1.7.0.
   - **New:** Credits and license section
   - **New:** Dismissible via close button or clicking outside the modal
 
-## [0.6.0] - 2026-02-23
+## [0.6.0] - 2026-02
 
 Built as 1.6.0.
 
@@ -466,29 +406,21 @@ Built as 1.6.0.
   - **Improved:** **Model column** (88 px, scrollable): hardware family — SDS-V, SDS-3, SDS-7, SDS-8, SDS-9,
     Clap-A, D.Clap, SDE, Empty
   - **Improved:** **Type column** (68 px, scrollable): drum type abbreviations filtered by selected model:
-  - **Improved:** SDS-V: BS · SN · TM · HH · CY  (CY targets Cymbal variant idx 7, rest target Drum idx 0)
-  - **Improved:** SDS-9: TM (idx 4) · BS (idx 10) · SN (idx 11) · RM (idx 12)
+  - **Improved:** SDS-V: BS · SN · TM · HH · CY
+  - **Improved:** SDS-9: TM · BS · SN · RM
   - **Improved:** SDS-3/8: BS · SN · TM
   - **Improved:** SDS-7: BS · SN · TM · HH · CY · RM · CP · CL
   - **Improved:** Clap-A / D.Clap: CP; SDE: PC · HH · CY · BS · TM
-  - **Improved:** **Preset column** (flex, scrollable): factory/user presets filtered by model + drum type;
-    currently selected preset highlighted; drumType tag removed (type column is the filter)
-  - **Improved:** `MODEL_FAMILY_TYPES` data structure encodes family → [{abbrev, label, variantIdx, drumTypes}]
-  - **Improved:** `getDrumTypeAbbrev()` maps raw drumType strings → 2-letter
-    abbreviation
-  - **Improved:** `buildTypeColumn(familyId, autoSelectAbbrev, setParam)` replaces `buildTypeChips()`
-  - **Improved:** `updatePresetsForType(familyId, typeEntry)` replaces `updatePresetsForModel(modelIndex)`
+  - **Improved:** **Preset column** (flex, scrollable): factory/user presets
+    filtered by model + drum type; currently selected preset highlighted; the
+    drum-type tag is gone (the type column is the filter)
 - **Improved:** **Channel strip chooser box** — display updated to show context
   at a glance:
-  - **Improved:** Line 1 (accent colour): `"FAMILY - ABBREV"` e.g. `"SDS-V - BS"` or `"SDS-9 - TM"`
+  - **Improved:** Line 1 (accent colour): family and type, e.g. "SDS-V - BS" or
+    "SDS-9 - TM"
   - **Improved:** Line 2 (dim): preset name only (removed "Drum · " / "Cymbal · " variant prefix)
-  - **Improved:** `padPresetState` extended with `typeAbbrev` field; derived from `getDrumTypeAbbrev(preset.drumType)`
-    when a preset is loaded, or from `getDefaultTypeAbbrevForModelIndex()` as fallback
-- **Improved:** `updatePresetDisplay()` is now the canonical updater for both
-  display lines (previously `bindVoicePicker.updateDisplay()` handled line 1
-  independently)
 
-## [0.5.5] - 2026-02-23
+## [0.5.5] - 2026-02
 
 Built as 1.5.5.
 
@@ -502,62 +434,60 @@ Built as 1.5.5.
   - **Improved:** SDS-V → Drum · Cymbal
   - **Improved:** Single-variant families set model directly with one click (no type row shown)
   - **Improved:** Channel strip preview: line 1 = family name, line 2 = "Type · Preset" when applicable
-  - **Improved:** `MODEL_FAMILIES` data structure encodes the family/variant/index mapping in JS
-- **Improved:** **`applyModelConfig` extended** — cases 10 (SDS-9 Bass), 11 (SDS-9 Snare), 12 (SDS-9 Rim)
-  configure knob visibility appropriate to each voice's signal path
-- **Fixed:** **`* 9` → `* 12` normaliser fix** — all MODEL parameter denormalizations updated to use
-  `MODEL_MAX_IDX = 12` (was 9, which silently mapped indices 10-12 to wrong models)
+- **Improved:** **The SDS-9 Bass, Snare and Rim voices show only the knobs their
+  signal path uses.**
+- **Fixed:** **The SDS-9 Bass, Snare and Rim choices selected the wrong models**
+  from the UI.
 
-## [0.5.4] - 2026-02-23
+## [0.5.4] - 2026-02
 
 Built as 1.5.4.
 
-New MODEL dropdown choices are appended — existing presets (indices 0–9) unaffected.
+New MODEL dropdown choices are appended — existing presets unaffected.
 
 ### Sound engine
 
-- **New:** **`SDS9BassModel`** — Service manual accurate bass voice:
+- **New:** **An SDS-9 bass voice**, accurate to the service manual:
   - **New:** No noise generator path (balance fixed at 100% tone, as in
     hardware)
   - **New:** 1 kHz sawtooth click burst (not random noise, matching hardware sawtooth generator)
   - **New:** No Second Skin filter FM (bass uses separate discrete generator, not CEM3394 FM path)
-  - **New:** CEM3394VCO + CEM3394Filter signal path, same chips as SDS-9 tom
+  - **New:** CEM3394 oscillator and filter, the same chips as the SDS-9 tom
     voice
-  - **New:** Selectable as "SDS-9 Bass" in MODEL dropdown (index 10)
-- **New:** **`SDS9SnareModel`** — Service manual confirms snare is EPROM+DAC, NOT analog synthesis:
-  - **New:** EPROM sample playback (one-shot, no ping-pong loop) — architecture mirrors SDSVCymbalModel
-  - **New:** CEM3372 filter post-playback (hardware specified; distinct from CEM3394 used for toms)
+  - **New:** Selectable as "SDS-9 Bass" in MODEL dropdown
+- **New:** **An SDS-9 snare voice**, EPROM sample through the CEM3372 filter, as
+  on the hardware:
+  - **New:** One-shot EPROM sample playback, no ping-pong loop
   - **New:** Default procedural content: band-passed noise at 4 kHz (snare buzz spectrum, 180 ms)
-  - **New:** External EPROM loading supported via `loadExternalSample()`
-  - **New:** Selectable as "SDS-9 Snare" in MODEL dropdown (index 11)
-- **New:** **`SDS9RimModel`** — Same EPROM+CEM3372 architecture as
-  SDS9SnareModel:
+  - **New:** Loads external EPROMs
+  - **New:** Selectable as "SDS-9 Snare" in MODEL dropdown
+- **New:** **An SDS-9 rim voice**, the same EPROM and CEM3372 design as the
+  snare:
   - **New:** Shorter, brighter burst (80 ms, ~7.5 kHz centre) for rimshot
     character
   - **New:** External EPROM loading supported
-  - **New:** Selectable as "SDS-9 Rim" in MODEL dropdown (index 12)
-- **Fixed:** **SDS-9 noise HPF frequency** (`SDS9Model.h`) — Hardware: RC network 100kΩ × 1µF = 1.59 Hz
-  (essentially white noise, no tonal shaping). Corrected from 600 Hz → 1.59 Hz.
-- **Fixed:** **SDS-9 FM_SCALE constant** (`SDS9Model.h`) — Hardware: 5V CV × (12000–200 Hz) = 11800 Hz
-  full modulation range. Corrected from 4000.0 → 11800.0.
-- **Fixed:** **CEM3394 filter cutoff range** (`CEM3394Filter.h`) — Hardware: timing caps give 200–12000 Hz
-  (from SDS-9 service manual). Corrected from 100–15000 Hz → 200–12000 Hz.
-- **Fixed:** **SDS-9 Second Skin jlimit** (`SDS9Model.h`) — Modulated cutoff clamp updated to match
-  corrected CEM3394 range: 100–15000 → 200–12000 Hz.
+  - **New:** Selectable as "SDS-9 Rim" in MODEL dropdown
+- **Fixed:** **SDS-9 noise HPF frequency** — Hardware: RC network 100kΩ × 1µF =
+  1.59 Hz (essentially white noise, no tonal shaping). Corrected from 600 Hz →
+  1.59 Hz.
+- **Fixed:** **SDS-9 Second Skin FM range** — Hardware: 5V CV × (12000–200 Hz) =
+  11800 Hz full modulation range. Corrected from 4000 Hz → 11800 Hz.
+- **Fixed:** **CEM3394 filter cutoff range** — Hardware: timing caps give
+  200–12000 Hz (from SDS-9 service manual). Corrected from 100–15000 Hz →
+  200–12000 Hz.
+- **Fixed:** **SDS-9 Second Skin cutoff limits** — the modulated cutoff now
+  stays within the corrected CEM3394 range: 100–15000 → 200–12000 Hz.
 
-## [0.5.3] - 2026-02-23
+## [0.5.3] - 2026-02
 
 Built as 1.5.3.
 
 ### UI
 
-- **Fixed:** **Knob double shadow** — Removed `filter: drop-shadow` from `.knob`; `.knob-body`
-  already has `box-shadow: 0 4px 8px` for the drop shadow, causing two shadows to stack
-  on every knob. Secondary issue: `filter` creates a CSS stacking context which caused
-  Clap-A tick marks (`.clap-a-tick`, `z-index:-1`) to bleed into the composite and cast
-  tick mark shadows onto the knob surface.
+- **Fixed:** **Knob double shadow** — every knob drew two drop shadows, and the
+  Clap-A tick marks cast shadows onto the knob surface.
 
-## [0.5.2] - 2026-02-22
+## [0.5.2] - 2026-02
 
 Built as 1.5.2.
 
@@ -565,19 +495,16 @@ Built as 1.5.2.
 
 - **Fixed:** **Clap-A balance knob label** — Changed from "ENS CRASH" to "BALANCE" (clearer purpose)
 - **Fixed:** **Clap-A section group boxes** — ENSEMBLE and CRASH bordered boxes now render correctly
-  - **Fixed:** Root cause: `clap-grp-*` CSS classes were applied but had no CSS rules; `.clap-section`
-    wrapper creation code was missing despite cleanup code and CSS being present
-  - **Fixed:** Fix: Create `.clap-section` wrapper divs with proper flex `order` values, matching
-    existing cleanup logic and clap-a.css styling
 
-## [0.5.1] - 2026-02-22
+## [0.5.1] - 2026-02
 
 Built as 1.5.1.
 
 ### Sound engine
 
-- **Improved:** **ClapModel: Schematic-accurate Analogue Clap-Trap DSP** - Complete rewrite of the
-  analog clap voice engine based on actual Simmons Analogue Clap-Trap circuit schematic
+- **Improved:** **Analogue Clap-Trap voice rebuilt from the circuit schematic**
+  — Complete rewrite of the analog clap voice engine based on actual Simmons
+  Analogue Clap-Trap circuit schematic
   - **Improved:** **3 RC integrator envelopes** replace rectangular burst pulses — each integrator
     (IC5/1, IC4/5, IC4/4 with C=2.2nF, R=1MO, tau=2.2ms) produces smooth exponential
     decay, triggered sequentially by the speed oscillator counter
@@ -591,14 +518,15 @@ Built as 1.5.1.
     D7/R6/R14/C4 circuit), not just random VCO phase offsets
   - **Improved:** **Separate VCA models**: CA3080 OTA for clap path only; crash path uses linear
     transistor VCA (TR6) matching schematic topology
-- **Improved:** **ClapModel parameter remapping** for schematic accuracy:
-  - **Improved:** `bend` -> Speed (burst rate oscillator frequency, was unused)
-  - **Improved:** `res` -> Rattle/Tight (integrator overlap, was SVF Q)
+- **Improved:** **Clap-Trap knobs remapped** for schematic accuracy:
+  - **Improved:** BEND -> Speed (burst rate oscillator frequency, was unused)
+  - **Improved:** RES -> Rattle/Tight (integrator overlap, was SVF Q)
   - **Improved:** SVF bandpass Q now internally fixed at 2.0 (hardware had no Q
     control)
-  - **Improved:** `burstCount`/`burstSpacingMs` parameters ignored (hardware has fixed 3 integrators)
+  - **Improved:** Burst Count and Burst Spacing are ignored (hardware has fixed
+    3 integrators)
 
-## [0.5.0] - 2026-02-22
+## [0.5.0] - 2026-02
 
 Built as 1.5.0.
 
@@ -609,7 +537,6 @@ Built as 1.5.0.
   - **New:** Metallic presets: FM-HiHat, FM-OpenHat, FM-Ride, FM-Crash
   - **New:** Clang presets: FM-Gong, FM-Clang, FM-Steelpan, FM-GamelanBell
   - **New:** FM Drum presets: FM-Kick, FM-Tom, FM-Timpani
-  - **New:** PresetManager engine mapping updated for all 9 models
 - **New:** **SDS-8 Factory Kit & Presets** - Authentic budget 5-channel
   configuration
   - **New:** "SDS-8 Kit" factory kit: Bass, Snare, Low/Mid/High Toms (5 active
@@ -624,41 +551,38 @@ Built as 1.5.0.
 - **New:** **All 8 YM2203C FM Algorithms** - Complete FM algorithm set for SDE
   model
   - **New:** Algorithm 0 (Chain): OP1→OP2→OP3→OP4 (deep metallic, gong)
-  - **New:** Algorithm 1 (ParallelMod): (OP1+OP2)→OP3→OP4 (thick organ-like)
-  - **New:** Algorithm 2 (DualMod): OP1→OP3→OP4 + OP2→OP4 (complex harmonics)
-  - **New:** Algorithm 3 (SplitChain): OP1→OP2→OP4 + OP3→OP4 (shimmering)
-  - **New:** Algorithm 4 (TwoPairs): (OP1→OP2)+(OP3→OP4) (SDE primary, bells)
-  - **New:** Algorithm 5 (OneToThree): OP1→(OP2+OP3+OP4) (brass, reed-like)
-  - **New:** Algorithm 6 (TwoOpPlusTwo): OP1→OP2 + OP3 + OP4 (mixed FM+additive)
-  - **New:** Algorithm 7 (AllCarriers): OP1+OP2+OP3+OP4 (pure additive, bright)
-  - **New:** New `FM_ALGO` parameter (0-7) for per-voice algorithm selection
+  - **New:** Algorithm 1 (Parallel): (OP1+OP2)→OP3→OP4 (thick organ-like)
+  - **New:** Algorithm 2 (Dual Mod): OP1→OP3→OP4 + OP2→OP4 (complex harmonics)
+  - **New:** Algorithm 3 (Split): OP1→OP2→OP4 + OP3→OP4 (shimmering)
+  - **New:** Algorithm 4 (Two Pairs): (OP1→OP2)+(OP3→OP4) (SDE primary, bells)
+  - **New:** Algorithm 5 (One-Three): OP1→(OP2+OP3+OP4) (brass, reed-like)
+  - **New:** Algorithm 6 (2-op + 2): OP1→OP2 + OP3 + OP4 (mixed FM+additive)
+  - **New:** Algorithm 7 (All Carriers): OP1+OP2+OP3+OP4 (pure additive, bright)
+  - **New:** New FM Algorithm parameter (0-7) for per-voice algorithm selection
 - **New:** **Velocity-to-Filter Modulation** - Authentic dynamics for SDS-V and SDS-8 models
-  - **New:** New `VEL_FILTER` parameter (0-100%) controls velocity-scaled filter
+  - **New:** New Vel->Filter parameter (0-100%) controls velocity-scaled filter
     cutoff
   - **New:** Bass drum gets brighter with harder hits (up to +4000 Hz modulation at max depth)
-  - **New:** Formula: `effectiveCutoff = baseCutoff + velocity * depth * 4000Hz`
-  - **New:** Implemented in SimmonsDrumModelBase with `calculateVelocityModulatedCutoff()` helper
 - **New:** **SDS-9 Waveform Selection** - Triangle or sawtooth VCO
-  - **New:** New `WAVEFORM` parameter (Triangle/Sawtooth)
+  - **New:** New Waveform parameter (Triangle/Sawtooth)
   - **New:** Sawtooth: brighter, more harmonics for cutting toms
   - **New:** Triangle: softer, classic SDS-9 character
 - **New:** **SDS-9 Sub-Oscillator** - Bass reinforcement for kick drums
-  - **New:** New `SUB_MIX` parameter (0-100%) blends sub-oscillator
+  - **New:** New Sub Mix parameter (0-100%) blends sub-oscillator
   - **New:** Square wave one octave below main VCO
   - **New:** Adds weight and depth to bass drum sounds
 - **New:** **SDS-V Pitched Noise** - Snare sizzle character control
-  - **New:** New `NOISE_PITCH` parameter (100-5000 Hz)
-  - **New:** SVFilter bandpass on noise path for tunable snare sizzle
+  - **New:** New Noise Pitch parameter (100-5000 Hz)
+  - **New:** A bandpass filter on the noise path for tunable snare sizzle
   - **New:** Lower frequencies = darker snare, higher = brighter crackle
 - **New:** **Model-Specific Pitch Ranges** - Authentic hardware constraints per voice engine
   - **New:** SDS-3/4: 30-3000 Hz (discrete VCO design, narrower range)
-  - **New:** ClapModel: 200-4000 Hz (VCO frequency limits)
-  - **New:** DigitalClapModel: 200-4000 Hz (EPROM playback rate)
-  - **New:** SDSVCymbalModel: 500-4000 Hz (EPROM clock rate)
-  - **New:** SDEModel: 20-4000 Hz (FM carrier frequency)
-  - **New:** Base class (SDS-V/7/8/9): 20-6000 Hz (full range)
-  - **New:** Virtual `getPitchRange()` method allows per-model override
-  - **New:** Pitch automatically clamped in `updateParameters()` for each model
+  - **New:** Analog Clap: 200-4000 Hz (VCO frequency limits)
+  - **New:** Digital Clap: 200-4000 Hz (EPROM playback rate)
+  - **New:** SDS-V Cymbal: 500-4000 Hz (EPROM clock rate)
+  - **New:** SDE: 20-4000 Hz (FM carrier frequency)
+  - **New:** SDS-V, SDS-7, SDS-8 and SDS-9: 20-6000 Hz (full range)
+  - **New:** Pitch automatically clamped to each model's range
 - **New:** **SDS-9 Velocity-Dependent Second Skin FM** - More expressive filter FM dynamics
   - **New:** FM depth now scales by hit velocity (harder hits = more Second Skin
     effect)
@@ -671,7 +595,6 @@ Built as 1.5.0.
   - **New:** Right (+): Bright-to-dull (filter sweeps down over envelope decay)
   - **New:** Left (-): Dull-to-bright (filter sweeps up over envelope decay)
   - **New:** ±8000 Hz sweep range, envelope-modulated cutoff
-  - **New:** Uses SVFilter lowpass for smooth timbral evolution
 - **New:** **SDS-8 Velocity Saturation Curve** - Authentic compressed dynamics
   - **New:** Non-linear velocity curve matching SDS-8's "punchier" character
   - **New:** Uses tanh saturation: ~78% output at 50% velocity, ~95% at 75%
@@ -679,46 +602,39 @@ Built as 1.5.0.
     design)
   - **New:** Consistent with "maximum output occurs at 75mV with 1.5V max input"
 - **New:** **SDE Per-Operator Detune** - Fine-tuning for complex FM timbres
-  - **New:** Added `setOperatorDetune(int opIndex, int cents)` API (-400 to +400
-    cents)
+  - **New:** Per-operator detune, -400 to +400 cents
   - **New:** Creates beating and shimmer effects between operators
   - **New:** Critical for realistic bell and metallic sounds
-  - **New:** 100 cents = 1 semitone, applied as frequency multiplier:
-    2^(cents/1200)
 - **New:** **Empty Voice Slot** - Disable unused voice slots for zero CPU
   overhead
   - **New:** New "Empty" option in MODEL dropdown (10 total models now)
-  - **New:** Created `EmptyModel.h` - null DrumModel with minimal footprint
-  - **New:** `processSample()` returns 0.0f, `isActive()` returns false
   - **New:** Voice processor skips all DSP processing for empty slots
   - **New:** Ideal for authentic 5-channel SDS-8 kits or partial kits
 - **Fixed:** **Bend direction reversed** - Negative bend now correctly bends
   pitch DOWN
-  - **Fixed:** Root cause: `pow(2, bendDepth * eg1Level)` gave upward bend for negative values
-  - **Fixed:** Fix: Negate bendDepth in `calculateModulatedFrequency()` so negative bend = downward
   - **Fixed:** Now matches authentic Simmons behavior: negative bend starts high, falls to target pitch
 
-## [0.4.0] - 2026-02-22
+## [0.4.0] - 2026-02
 
 Built as 1.4.0.
 
 ### Sound engine
 
-- **New:** **YM2203C.h** - Complete 4-operator FM synthesis engine
-  - **New:** 20-bit phase accumulators with proper wrapping
+- **New:** **A YM2203C 4-operator FM synthesis engine**
   - **New:** Per-operator ADSR envelopes with YM2203C-style exponential curves
   - **New:** OP1 self-feedback (0-7 levels) for harmonic richness
   - **New:** Three algorithm implementations for drum sounds:
   - **New:** **Algorithm 0 (Chain):** OP1→OP2→OP3→OP4 for deep metallic sounds
-  - **New:** **Algorithm 4 (TwoPairs):** OP1→OP2 + OP3→OP4 (SDE primary mode)
-  - **New:** **Algorithm 7 (AllCarriers):** All operators as carriers for bright additive sounds
-- **New:** **SDEModel.h** - DrumModel wrapper for YM2203C
+  - **New:** **Algorithm 4 (Two Pairs):** OP1→OP2 + OP3→OP4 (SDE primary mode)
+  - **New:** **Algorithm 7 (All Carriers):** All operators as carriers for
+    bright additive sounds
+- **New:** **The SDE's knobs drive the YM2203C**:
   - **New:** Balance parameter controls FM mode (0-33% bell, 33-66% metallic, 66-100% clang)
   - **New:** Filter controls modulator frequency ratio (1-15x)
   - **New:** Resonance controls feedback amount (0-7)
   - **New:** Click controls modulation depth
   - **New:** Full FM Speed/Depth parameter support
-- **New:** **SDE voice engine** in Voice.h (Model index 8)
+- **New:** **SDE voice engine**
   - **New:** Historical: SDE (1986) was "the only FM synth ever made with knobs"
   - **New:** Authentic YM2203C FM percussion for bells, marimbas, hi-hats,
     metallic clang
@@ -729,41 +645,36 @@ Built as 1.4.0.
   - **New:** Adds characteristic "crunch" and aliasing artifacts
 - **New:** **Per-Voice EPROM Assignment** - Independent sample loading for each
   pad
-  - **New:** 12 independent EPROMManager instances (one per voice)
-  - **New:** Per-pad EPROM status indicators in WebView UI
-  - **New:** `loadCymbalEPROM(voiceIndex, file)` API
+  - **New:** Per-pad EPROM status indicators
   - **New:** Visual "ROM" badge on pads with loaded EPROMs
-- **Fixed:** **SDSVCymbalModel Nyquist singularity** - Filter cutoff at exactly 0.5 normalized
-  caused sin(π) = 0, making all biquad coefficients zero (silent output)
-  - **Fixed:** Root cause: `fc = 8000/16000 = 0.5` when filter cutoff = EPROM render rate / 2
-  - **Fixed:** Fix: Clamp fc to [0.05, 0.45] to avoid Nyquist edge case
+- **Fixed:** **SDS-V Cymbal went silent** when its filter cutoff sat at exactly
+  half the EPROM render rate.
 
 ### UI
 
 - **Improved:** Updated all UI components for 9-model support
-- **Improved:** **Model-specific bend knob styles** - Historical accuracy via `getModelConfig()` API + WebView UI
-  - **Improved:** `bendStyle: "traditional"` for SDS-3/4/V, Clap, D.Clap (0-100% knob, down-only)
-  - **Improved:** `bendStyle: "bipolar"` for SDS-7/8/9, SDE (center=0,
-    left=down, right=up)
-  - **Improved:** `bendStyle: "hidden"` for Cymbal (EPROM-based, no pitch bend)
-  - **Improved:** WebView UI: Knob rotation and drag behavior adapt to bend
-    style
+- **Improved:** **Model-specific bend knob styles** - for historical accuracy
+  - **Improved:** Traditional for SDS-3/4/V, Clap, D.Clap (0-100% knob,
+    down-only)
+  - **Improved:** Bipolar for SDS-7/8/9, SDE (center=0, left=down, right=up)
+  - **Improved:** Hidden for Cymbal (EPROM-based, no pitch bend)
+  - **Improved:** Knob rotation and drag behavior adapt to bend style
   - **Improved:** Value display: Traditional shows "0-100%", bipolar shows "-100
     to +100"
 
-## [0.3.0] - 2026-02-19
+## [0.3.0] - 2026-02
 
 Built as 1.3.0.
 
 ### Sound engine
 
-- **New:** **DiscreteVCA.h** - Discrete transistor VCA for SDS-3/4 (1978-1980) authenticity
+- **New:** **A discrete transistor VCA for the SDS-3/4** (1978-1980)
   - **New:** Less precise exponential response than OTA designs (more "organic")
   - **New:** Soft polynomial saturation (gentler than OTA's tanh curve)
   - **New:** CV feedthrough modeling (subtle transient click on envelope attack)
   - **New:** Thermal noise floor for vintage character
   - **New:** 60dB dynamic range (vs 80dB for CEM3360)
-- **New:** **CEM3360VCA.h** - Curtis CEM3360 dual VCA for SDS-9 (1985) "hi-fi"
+- **New:** **The SDS-9's Curtis CEM3360 dual VCA**, for its (1985) "hi-fi"
   character
   - **New:** Precise log conformance over 80dB range (factory-trimmed accuracy)
   - **New:** Low distortion (<0.05% THD) - cleaner than OTA designs
@@ -775,26 +686,21 @@ Built as 1.3.0.
   - **New:** Standard triangle VCO path (RC LPF → Op-Amp coloring → VCA)
   - **New:** No FM capability - simpler, more accessible sound
   - **New:** "Similar to SDS-V but softer, more musical saturation" character
-- **Improved:** **SDS3Model.h** - Now uses `DiscreteVCA` (shadows base class
-  CA3080VCA)
-- **Improved:** **SDS9Model.h** - Now uses `CEM3360VCA` (shadows base class
-  CA3080VCA)
+- **Improved:** **The SDS-3/4 uses the discrete transistor VCA**
+- **Improved:** **The SDS-9 uses the CEM3360 VCA**
 - **Improved:** Model-specific VCAs wired for authentic per-era character
 
 ### UI
 
-- **New:** **EPROM UI Integration** - WebView file browser for user-loadable
-  .bin files
-  - **New:** `browseForEPROM()` native function with juce::FileChooser
+- **New:** **Load your own EPROM .bin files** from a file browser
   - **New:** EPROM button in top bar with load/clear toggle
-  - **New:** Loading state indicator with CSS animation
+  - **New:** Loading state indicator
   - **New:** Status display for filename/errors
 - **New:** **Dynamic UI Based on Model** - Parameter visibility per model
-  - **New:** `getModelConfig()` native function returns visibility flags
-  - **New:** `applyModelConfig()` hides/dims unavailable parameters
+  - **New:** Unavailable parameters are hidden or dimmed
   - **New:** 8 model configurations supported (SDS-V, SDS-3, SDS-7, SDS-8, SDS-9, Clap, D.Clap, Cymbal)
 
-## [0.2.0] - 2026-02-19
+## [0.2.0] - 2026-02
 
 Built as 1.2.0.
 
@@ -804,32 +710,22 @@ Built as 1.2.0.
   - **New:** CEM3394 VCO with triangle, sawtooth, and sub-oscillator outputs
   - **New:** CEM3394 ZDF filter with k=1.5 saturation (between CEM3372 and Moog)
   - **New:** **Second Skin FM**: VCO modulates filter cutoff at audio rate for complex timbres
-  - **New:** `fastTan()` approximation enables per-sample cutoff updates without CPU overhead
 - **New:** **SDS-V Cymbal voice engine** - EPROM-based cymbal/hi-hat with authentic SDS-V character
   - **New:** Bidirectional (ping-pong) EPROM playback for sustained metallic
     tones
   - **New:** Procedurally generated metallic content (noise → resonant bandpass → 8-bit quantization)
-  - **New:** User-loadable external EPROM .bin files via `loadCymbalEPROM()` API
+  - **New:** User-loadable external EPROM .bin files
   - **New:** Authentic 8-bit quantization with zero-order hold reconstruction
-- **New:** `CEM3394VCO.h` - Multi-waveform bandlimited oscillator
-  - **New:** Triangle output with polyBLAMP anti-aliasing
-  - **New:** Sawtooth output with polyBLEP anti-aliasing
+- **New:** **The SDS-9's CEM3394 oscillator**, band-limited, so its triangle and
+  sawtooth do not alias.
   - **New:** Sub-oscillator (square wave, one octave below)
-- **New:** `CEM3394Filter.h` - ZDF 4-pole filter optimized for audio-rate
-  modulation
-- **New:** `SDS9Model.h` - Complete SDS-9 signal path with Second Skin FM
-- **New:** `SDSVCymbalModel.h` - EPROM-based cymbal/hi-hat voice engine
-- **New:** **EPROMPlayer bidirectional mode** - Ping-pong looping for sustained tonal content
+- **New:** **The SDS-9's CEM3394 filter**, modelled for fast modulation.
+- **New:** **EPROM ping-pong looping** for sustained tonal content
   - **New:** Forward/reverse playback with smooth direction changes
   - **New:** Looping vs one-shot modes
-  - **New:** Address tracking for visualization
-  - **New:** `loadSampleData()` methods for external sample loading
-- **New:** `EPROMManager.h` - Thread-safe user-loadable .bin file support
-  - **New:** Double-buffered loading (non-blocking audio thread)
-  - **New:** Async file loading with atomic commit
-- **Improved:** EPROMPlayer now supports bidirectional/looping configuration and external sample loading
+- **New:** **EPROM files load without interrupting audio**
 
-## [0.1.0] - 2026-02-19
+## [0.1.0] - 2026-02
 
 Built as 1.1.0.
 
@@ -841,14 +737,13 @@ Built as 1.1.0.
   - **New:** Warmer, softer character compared to the SDS-V's SSM2044 filter
   - **New:** No passband attenuation under resonance (unlike SSM2044)
   - **New:** Same triangle VCO + envelope architecture as SDS-V
-- **New:** `MoogLadderFilter.h` - New DSP component implementing classic Moog 4-pole 24dB/oct ladder
-- **New:** `SDS3Model.h` - Complete SDS-3/4 signal path implementation
+- **New:** **A classic Moog 4-pole 24dB/oct ladder filter** for the SDS-3/4
 
 ### UI
 
-- **New:** Model selection dropdown now includes "SDS-3" option (index 1)
+- **New:** Model selection dropdown now includes "SDS-3" option
 
-## [0.0.1] - 2026-02-14
+## [0.0.1] - 2026-02
 
 Built as 1.0.0.
 
